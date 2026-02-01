@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LLMic Auditor: Public SaaS Edition
  * Description: Public-facing AI SEO fitness auditor with stark, minimalist design.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Cursor AI
  * License: GPL-2.0-or-later
  * Text Domain: llmic-auditor
@@ -49,6 +49,16 @@ function llmic_auditor_register_assets() {
     max-width: 820px;
     margin: 24px auto;
     letter-spacing: -0.01em;
+}
+.llmic-auditor__title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.llmic-auditor__subtitle {
+    font-size: 12px;
+    color: #555555;
+    margin-bottom: 18px;
 }
 .llmic-auditor__form {
     display: flex;
@@ -121,6 +131,19 @@ function llmic_auditor_register_assets() {
     top: 0;
     height: 1px;
     background: #262626;
+    transition: width 240ms ease-out;
+}
+.llmic-auditor__score-wrap {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.llmic-auditor__score-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 .llmic-auditor__grid {
     display: grid;
@@ -161,12 +184,19 @@ function llmic_auditor_register_assets() {
     }
 }';
 
-    wp_register_style('llmic-auditor', false, array(), '1.0.0');
+    wp_register_style('llmic-auditor', false, array(), '1.0.1');
     wp_add_inline_style('llmic-auditor', $css);
 
     $js = '
 (function() {
     "use strict";
+
+    function formatNumber(value) {
+        if (typeof value !== "number") {
+            return value;
+        }
+        return value.toLocaleString();
+    }
 
     function createMetric(label, value) {
         var wrapper = document.createElement("div");
@@ -190,31 +220,42 @@ function llmic_auditor_register_assets() {
         results.innerHTML = "";
         results.hidden = false;
 
+        var scoreWrap = document.createElement("div");
+        scoreWrap.className = "llmic-auditor__score-wrap";
+
+        var scoreLabel = document.createElement("div");
+        scoreLabel.className = "llmic-auditor__score-label";
+        scoreLabel.textContent = "Efficiency Score";
+
         var score = document.createElement("div");
         score.className = "llmic-auditor__score";
         score.textContent = data.efficiency_score + "/100";
+
+        scoreWrap.appendChild(scoreLabel);
+        scoreWrap.appendChild(score);
 
         var bar = document.createElement("div");
         bar.className = "llmic-auditor__bar";
         var fill = document.createElement("div");
         fill.className = "llmic-auditor__bar-fill";
-        fill.style.width = data.ratio.toFixed(1) + "%";
+        var ratio = Math.max(0, Math.min(100, data.ratio));
+        fill.style.width = ratio.toFixed(1) + "%";
         bar.appendChild(fill);
 
         var grid = document.createElement("div");
         grid.className = "llmic-auditor__grid";
-        grid.appendChild(createMetric("Token Cost", data.total_tokens + " tokens"));
-        grid.appendChild(createMetric("Content Tokens", data.content_tokens + " tokens"));
-        grid.appendChild(createMetric("Wasted Spend", data.wasted_spend + " tokens"));
-        grid.appendChild(createMetric("Signal-to-Noise", data.ratio.toFixed(1) + "%"));
-        grid.appendChild(createMetric("Bot Latency", data.latency_ms + " ms"));
-        grid.appendChild(createMetric("HTML Size", data.html_size + " bytes"));
+        grid.appendChild(createMetric("Token Cost", formatNumber(data.total_tokens) + " tokens"));
+        grid.appendChild(createMetric("Content Tokens", formatNumber(data.content_tokens) + " tokens"));
+        grid.appendChild(createMetric("Wasted Spend", formatNumber(data.wasted_spend) + " tokens"));
+        grid.appendChild(createMetric("Signal-to-Noise", ratio.toFixed(1) + "%"));
+        grid.appendChild(createMetric("Bot Latency", formatNumber(data.latency_ms) + " ms"));
+        grid.appendChild(createMetric("HTML Size", formatNumber(data.html_size) + " bytes"));
 
         var snippet = document.createElement("div");
         snippet.className = "llmic-auditor__snippet";
         snippet.textContent = data.snippet;
 
-        results.appendChild(score);
+        results.appendChild(scoreWrap);
         results.appendChild(bar);
         results.appendChild(grid);
         results.appendChild(snippet);
@@ -230,12 +271,19 @@ function llmic_auditor_register_assets() {
         var input = container.querySelector(".llmic-auditor__input");
         var button = container.querySelector(".llmic-auditor__button");
         var results = container.querySelector(".llmic-auditor__results");
+        var ajaxUrl = window.LLMICAuditor && LLMICAuditor.ajaxUrl ? LLMICAuditor.ajaxUrl : "";
 
         function runAudit() {
             var url = input.value.trim();
             if (!url) {
                 results.hidden = true;
                 setStatus(container, "Please enter a valid URL to audit.", true);
+                return;
+            }
+
+            if (!ajaxUrl) {
+                results.hidden = true;
+                setStatus(container, "Audit service unavailable. Please refresh and try again.", true);
                 return;
             }
 
@@ -248,7 +296,7 @@ function llmic_auditor_register_assets() {
             body.append("nonce", container.getAttribute("data-nonce"));
             body.append("url", url);
 
-            fetch(LLMICAuditor.ajaxUrl, {
+            fetch(ajaxUrl, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
@@ -287,13 +335,19 @@ function llmic_auditor_register_assets() {
         });
     }
 
-    document.addEventListener("DOMContentLoaded", function() {
+    function boot() {
         var auditors = document.querySelectorAll(".llmic-auditor");
         auditors.forEach(initAuditor);
-    });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", boot);
+    } else {
+        boot();
+    }
 })();';
 
-    wp_register_script('llmic-auditor', false, array(), '1.0.0', true);
+    wp_register_script('llmic-auditor', false, array(), '1.0.1', false);
     wp_add_inline_script('llmic-auditor', $js);
     wp_localize_script('llmic-auditor', 'LLMICAuditor', array(
         'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -314,14 +368,18 @@ function llmic_auditor_shortcode() {
 
     return sprintf(
         '<div class="llmic-auditor" data-nonce="%1$s">
-            <div class="llmic-auditor__form">
-                <input class="llmic-auditor__input" type="url" placeholder="%2$s" aria-label="%3$s" />
-                <button class="llmic-auditor__button" type="button">%4$s</button>
+            <div class="llmic-auditor__title">%2$s</div>
+            <div class="llmic-auditor__subtitle">%3$s</div>
+            <div class="llmic-auditor__form" role="search">
+                <input class="llmic-auditor__input" type="url" placeholder="%4$s" aria-label="%5$s" />
+                <button class="llmic-auditor__button" type="button">%6$s</button>
             </div>
             <div class="llmic-auditor__status" aria-live="polite"></div>
             <div class="llmic-auditor__results" hidden></div>
         </div>',
         esc_attr($nonce),
+        esc_html__('LLMic Auditor', 'llmic-auditor'),
+        esc_html__('AI crawl budget intelligence, distilled.', 'llmic-auditor'),
         esc_attr__('https://example.com/your-page', 'llmic-auditor'),
         esc_attr__('Enter a URL to audit', 'llmic-auditor'),
         esc_html__('Check URL', 'llmic-auditor')
